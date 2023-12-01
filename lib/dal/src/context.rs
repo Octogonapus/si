@@ -220,7 +220,7 @@ pub struct DalContext {
     /// And also for SDF routes to block the HTTP request until the jobs get executed, so SDF tests don't race.
     blocking: bool,
     /// Determines if we should not enqueue dependent value update jobs for attribute updates in
-    /// this context
+    /// this context. Useful for builtin migrations, since we don't care about attribute values propagation then.
     no_dependent_values: bool,
 }
 
@@ -232,6 +232,14 @@ impl DalContext {
             services_context,
             blocking,
             no_dependent_values: false,
+        }
+    }
+
+    pub fn to_builder(&self) -> DalContextBuilder {
+        DalContextBuilder {
+            services_context: self.services_context.clone(),
+            blocking: self.blocking,
+            no_dependent_values: self.no_dependent_values,
         }
     }
 
