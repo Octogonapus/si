@@ -232,11 +232,9 @@ impl Action {
                         }
                         ActionKind::Delete => {
                             // If there is a resource and a create, this is a initial deletion, so no parent
-                            if resource.is_some()
-                                && action_ids_by_kind(ActionKind::Create).count() > 0
+                            if resource.is_none()
+                                || action_ids_by_kind(ActionKind::Create).count() == 0
                             {
-                                continue;
-                            } else {
                                 // Every other action kind is a parent
                                 let ids = actions_by_kind
                                     .iter()
@@ -262,6 +260,9 @@ impl Action {
                 }
             }
 
+            // Deletions requires reverse order than the rest
+            let mut reversed_parents: HashMap<ActionId, Vec<ActionId>> = HashMap::new();
+
             for parent_node_id in parent_ids {
                 let parent_node = Node::get_by_id(ctx_with_deleted, &parent_node_id)
                     .await?
@@ -279,7 +280,17 @@ impl Action {
                     .get(parent_component.id())
                     .cloned()
                     .unwrap_or_default();
-                for actions in actions_by_kind.values() {
+                for (kind, actions) in &actions_by_kind {
+                    if *kind == ActionKind::Delete {
+                        for parent_action in &parent_actions {
+                            reversed_parents
+                                .entry(*parent_action.id())
+                                .or_default()
+                                .extend(actions.iter().map(|a| *a.id()));
+                        }
+                        continue;
+                    }
+
                     for action in actions {
                         actions_graph
                             .entry(*action.id())
@@ -288,7 +299,12 @@ impl Action {
                     }
                 }
             }
+
+            for (id, parents) in reversed_parents {
+                actions_graph.entry(id).or_default().extend(parents);
+            }
         }
+
         let mut actions_bag_graph: HashMap<ActionId, ActionBag> = HashMap::new();
         for (id, parents) in actions_graph {
             actions_bag_graph.insert(

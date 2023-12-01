@@ -1,6 +1,7 @@
 use std::{collections::HashMap, collections::VecDeque, convert::TryFrom};
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use futures::{stream::FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 use telemetry::prelude::*;
@@ -15,6 +16,7 @@ use crate::{
         },
         producer::{JobProducer, JobProducerResult},
     },
+    standard_model::{self, TypeHint},
     AccessBuilder, ActionKind, ActionPrototype, ActionPrototypeId, Component, ComponentId,
     DalContext, Fix, FixBatch, FixBatchId, FixCompletionStatus, FixId, FixResolver, StandardModel,
     Visibility, WsEvent,
@@ -166,7 +168,7 @@ impl JobConsumer for FixesJob {
                         failed_fixes.push_back((
                             id,
                             fix.completion_message()
-                                .map(|msg| format!("Action errored: {msg}"))
+                                .map(ToOwned::to_owned)
                                 .unwrap_or_else(|| {
                                     format!("Action failed with unknown error: {completion_status}")
                                 }),
@@ -208,6 +210,23 @@ impl JobConsumer for FixesJob {
             fixes.remove(&id);
 
             if let Some(mut fix) = Fix::get_by_id(ctx, &id).await? {
+                let deleted_ctx = &ctx.clone_with_delete_visibility();
+                let component = Component::get_by_id(deleted_ctx, fix.component_id())
+                    .await?
+                    .ok_or_else(|| JobConsumerError::ComponentNotFound(*fix.component_id()))?;
+                if component.visibility().deleted_at.is_some() {
+                    component.set_deleted_at(deleted_ctx, None).await?;
+                    standard_model::update(
+                        deleted_ctx,
+                        "components",
+                        "visibility_deleted_at",
+                        component.id(),
+                        None::<DateTime<Utc>>,
+                        TypeHint::TimestampWithTimeZone,
+                    )
+                    .await?;
+                }
+
                 if fix.started_at().is_none() {
                     fix.stamp_started(ctx).await?;
                 }
