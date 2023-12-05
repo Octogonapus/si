@@ -2,7 +2,11 @@
   <ScrollArea v-if="selectedComponent">
     <template #top>
       <SidebarSubpanelTitle label="Asset Details" icon="component" />
-      <ComponentCard :componentId="selectedComponent.id" class="m-xs" />
+      <ComponentCard
+        :componentId="selectedComponent.id"
+        class="m-xs"
+        @diff="selectDiffPanel"
+      />
 
       <div
         v-if="currentStatus && currentStatus.isUpdating"
@@ -59,7 +63,7 @@
 
     <template v-else>
       <div class="absolute inset-0">
-        <TabGroup trackingSlug="asset_details">
+        <TabGroup ref="mainTabsRef" trackingSlug="asset_details">
           <TabGroupItem slug="component">
             <template #label>
               <Inline noWrap>
@@ -71,7 +75,11 @@
                 />
               </Inline>
             </template>
-            <TabGroup trackingSlug="asset_details/component" minimal>
+            <TabGroup
+              ref="componentTabsRef"
+              trackingSlug="asset_details/component"
+              minimal
+            >
               <TabGroupItem label="Attributes" slug="attributes">
                 <AttributesPanel />
               </TabGroupItem>
@@ -165,7 +173,7 @@
 
 <script lang="ts" setup>
 import * as _ from "lodash-es";
-import { computed, onBeforeMount } from "vue";
+import { computed, nextTick, onBeforeMount, ref } from "vue";
 import {
   Icon,
   ErrorMessage,
@@ -193,6 +201,9 @@ import SidebarSubpanelTitle from "./SidebarSubpanelTitle.vue";
 import AssetDiffDetails from "./AssetDiffDetails.vue";
 import StatusIndicatorIcon from "./StatusIndicatorIcon.vue";
 import AttributesPanel from "./AttributesPanel/AttributesPanel.vue";
+
+const mainTabsRef = ref();
+const componentTabsRef = ref();
 
 const emit = defineEmits(["delete", "restore"]);
 
@@ -266,6 +277,17 @@ const refreshing = computed(() => {
 const onClickRefreshButton = () => {
   if (selectedComponent.value) {
     componentsStore.REFRESH_RESOURCE_INFO(selectedComponent.value.id);
+  }
+};
+
+const selectDiffPanel = () => {
+  if (mainTabsRef.value) {
+    mainTabsRef.value.selectTab("component");
+    nextTick(() => {
+      if (componentTabsRef.value) {
+        componentTabsRef.value.selectTab("diff");
+      }
+    });
   }
 };
 </script>

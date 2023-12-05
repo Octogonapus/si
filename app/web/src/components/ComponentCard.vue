@@ -28,7 +28,7 @@
       </Stack>
 
       <!-- change status icon -->
-      <div class="ml-auto">
+      <div class="ml-auto cursor-pointer" @click="emit('diff')">
         <StatusIndicatorIcon type="change" :status="component.changeStatus" />
       </div>
     </div>
@@ -82,4 +82,8 @@ const componentNameTooltip = computed(() => {
     return {};
   }
 });
+
+const emit = defineEmits<{
+  (e: "diff"): void;
+}>();
 </script>
