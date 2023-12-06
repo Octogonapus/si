@@ -280,7 +280,7 @@ impl JobConsumer for FixesJob {
                 }
             }
         }
-        ctx.commit().await?;
+        ctx.blocking_commit().await?;
 
         if fixes.is_empty() {
             finish_batch(ctx, self.batch_id).await?;
@@ -288,8 +288,6 @@ impl JobConsumer for FixesJob {
             ctx.enqueue_job(FixesJob::new_iteration(ctx, fixes, self.batch_id))
                 .await?;
         }
-
-        ctx.commit().await?;
 
         Ok(())
     }

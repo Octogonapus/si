@@ -157,11 +157,11 @@ impl Action {
     }
 
     pub async fn order(ctx: &DalContext) -> ActionResult<HashMap<ActionId, ActionBag>> {
-        let actions_by_id: HashMap<ActionId, Action> = Self::find_for_change_set(ctx)
+        let actions_by_id: HashMap<ActionId, Action> = dbg!(Self::find_for_change_set(ctx)
             .await?
             .into_iter()
             .map(|a| (*a.id(), a))
-            .collect();
+            .collect());
 
         let mut actions_by_component: HashMap<ComponentId, Vec<Action>> = HashMap::new();
         for action in actions_by_id.values() {
@@ -173,7 +173,7 @@ impl Action {
 
         let ctx_with_deleted = &ctx.clone_with_delete_visibility();
 
-        let nodes_graph = Node::build_graph(ctx, false).await?;
+        let nodes_graph = dbg!(Node::build_graph(ctx, false).await)?;
         let mut actions_graph: HashMap<ActionId, (ActionKind, Vec<ActionId>)> = HashMap::new();
 
         for (node_id, parent_ids) in nodes_graph {
@@ -185,7 +185,7 @@ impl Action {
                 .await?
                 .ok_or(NodeError::ComponentIsNone)?;
 
-            if component.is_destroyed() {
+            if dbg!(component.is_destroyed()) {
                 continue;
             }
 
@@ -288,7 +288,7 @@ impl Action {
                     .await?
                     .ok_or(NodeError::ComponentIsNone)?;
 
-                if parent_component.is_destroyed() {
+                if dbg!(parent_component.is_destroyed()) {
                     continue;
                 }
 
@@ -309,7 +309,7 @@ impl Action {
         }
 
         let mut actions_bag_graph: HashMap<ActionId, ActionBag> = HashMap::new();
-        for (id, (kind, parents)) in actions_graph {
+        for (id, (kind, parents)) in dbg!(actions_graph) {
             actions_bag_graph.insert(
                 id,
                 ActionBag {

@@ -840,6 +840,7 @@ async fn model_and_fix_flow_mocked_whiskers(
             vec![(ec2.component_id, ActionKind::Create)],
         ),
     ];
+    dbg!(&actions, &expected_actions_and_parents);
 
     'outer: for (expected_comp_id, expected_kind, expected_parents) in &expected_actions_and_parents
     {
@@ -876,7 +877,6 @@ async fn model_and_fix_flow_mocked_whiskers(
         );
     }
 
-    dbg!(&actions, &expected_actions_and_parents);
     assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     let fix_batch_history_views = harness.list_fixes(ctx.visibility()).await;
@@ -894,6 +894,23 @@ async fn model_and_fix_flow_mocked_whiskers(
         Some(FixCompletionStatus::Success), // expected
         fix_batch_history_view.status
     );
+
+    ctx.rollback().await.expect("unable to rollback ctx");
+
+    let key_pair_comp = Component::get_by_id(&ctx, &key_pair.component_id).await.expect("unable to get key pair").expect("unable to get a key pair");
+    assert!(key_pair_comp.resource(&ctx).await.expect("unable to get resource").payload.is_some());
+
+    let ec2_comp = Component::get_by_id(&ctx, &ec2.component_id).await.expect("unable to get ec2").expect("unable to get a ec2");
+    assert!(ec2_comp.resource(&ctx).await.expect("unable to get resource").payload.is_some());
+
+    let target_group_comp = Component::get_by_id(&ctx, &target_group.component_id).await.expect("unable to get target_group").expect("unable to get a target_group");
+    assert!(target_group_comp.resource(&ctx).await.expect("unable to get resource").payload.is_some());
+
+    let security_group_comp = Component::get_by_id(&ctx, &security_group.component_id).await.expect("unable to get security_group").expect("unable to get a security_group");
+    assert!(security_group_comp.resource(&ctx).await.expect("unable to get resource").payload.is_some());
+
+    let ingress_comp = Component::get_by_id(&ctx, &ingress.component_id).await.expect("unable to get ingress").expect("unable to get a ingress");
+    assert!(ingress_comp.resource(&ctx).await.expect("unable to get resource").payload.is_some());
 
     // // let's refresh the resources and check what they are
     // harness.refresh_resources(&mut ctx).await;
@@ -952,6 +969,7 @@ async fn model_and_fix_flow_mocked_whiskers(
         ),
         (target_group.component_id, ActionKind::Delete, Vec::new()),
     ];
+    dbg!(&actions, &expected_actions_and_parents);
 
     'outer: for (expected_comp_id, expected_kind, expected_parents) in &expected_actions_and_parents
     {
@@ -987,8 +1005,6 @@ async fn model_and_fix_flow_mocked_whiskers(
             expected_actions_and_parents
         );
     }
-
-    dbg!(&actions, &expected_actions_and_parents);
     assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     let num_of_fix_batch_history_views = harness.list_fixes(ctx.visibility()).await.len();
@@ -1012,4 +1028,22 @@ async fn model_and_fix_flow_mocked_whiskers(
 
     // TODO(nick): mix in creation and deletion actions as well as scenarios where not
     // all fixes are ran all at once.
+
+    ctx.rollback().await.expect("unable to rollback ctx");
+
+    let deleted_ctx = &ctx.clone_with_delete_visibility();
+    let key_pair_comp = Component::get_by_id(deleted_ctx, &key_pair.component_id).await.expect("unable to get key pair").expect("unable to get a key pair");
+    assert!(key_pair_comp.is_destroyed());
+
+    let ec2_comp = Component::get_by_id(deleted_ctx, &ec2.component_id).await.expect("unable to get ec2").expect("unable to get a ec2");
+    assert!(ec2_comp.is_destroyed());
+
+    let target_group_comp = Component::get_by_id(deleted_ctx, &target_group.component_id).await.expect("unable to get target_group").expect("unable to get a target_group");
+    assert!(target_group_comp.is_destroyed());
+
+    let security_group_comp = Component::get_by_id(deleted_ctx, &security_group.component_id).await.expect("unable to get security_group").expect("unable to get a security_group");
+    assert!(security_group_comp.is_destroyed());
+
+    let ingress_comp = Component::get_by_id(deleted_ctx, &ingress.component_id).await.expect("unable to get ingress").expect("unable to get a ingress");
+    assert!(ingress_comp.is_destroyed());
 }
