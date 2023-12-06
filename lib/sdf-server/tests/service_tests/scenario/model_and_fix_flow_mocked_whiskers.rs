@@ -840,7 +840,6 @@ async fn model_and_fix_flow_mocked_whiskers(
             vec![(ec2.component_id, ActionKind::Create)],
         ),
     ];
-    assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     'outer: for (expected_comp_id, expected_kind, expected_parents) in &expected_actions_and_parents
     {
@@ -876,6 +875,9 @@ async fn model_and_fix_flow_mocked_whiskers(
             expected_actions_and_parents
         );
     }
+
+    dbg!(&actions, &expected_actions_and_parents);
+    assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     let fix_batch_history_views = harness.list_fixes(ctx.visibility()).await;
     assert!(fix_batch_history_views.is_empty());
@@ -950,7 +952,6 @@ async fn model_and_fix_flow_mocked_whiskers(
         ),
         (target_group.component_id, ActionKind::Delete, Vec::new()),
     ];
-    assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     'outer: for (expected_comp_id, expected_kind, expected_parents) in &expected_actions_and_parents
     {
@@ -986,6 +987,9 @@ async fn model_and_fix_flow_mocked_whiskers(
             expected_actions_and_parents
         );
     }
+
+    dbg!(&actions, &expected_actions_and_parents);
+    assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     let num_of_fix_batch_history_views = harness.list_fixes(ctx.visibility()).await.len();
 

@@ -83,7 +83,7 @@ async fn model_and_fix_flow_whiskers(
         };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 60 * 1000);
+    await new Promise((resolve) => setTimeout(resolve, 2 * 60 * 1000);
 
     return {
         payload: null,
@@ -571,6 +571,43 @@ async fn model_and_fix_flow_whiskers(
             ],
         ),
     ];
+
+    'outer: for (expected_comp_id, expected_kind, expected_parents) in &expected_actions_and_parents
+    {
+        for action in actions.values() {
+            if *expected_comp_id == action.component_id
+                && *expected_kind == action.kind
+                && action.parents.len() == expected_parents.len()
+            {
+                'parent_outer: for (expected_comp_id, expected_kind) in expected_parents {
+                    for action in actions.values() {
+                        if *expected_comp_id == action.component_id && *expected_kind == action.kind
+                        {
+                            continue 'parent_outer;
+                        }
+                    }
+
+                    panic!(
+                        "Expected parent action not found: {:?} ({:#?} {:#?})",
+                        (expected_comp_id, expected_kind),
+                        actions,
+                        expected_actions_and_parents
+                    );
+                }
+
+                continue 'outer;
+            }
+        }
+
+        panic!(
+            "Expected action not found: {:?} ({:#?} {:#?})",
+            (expected_comp_id, expected_kind),
+            actions,
+            expected_actions_and_parents
+        );
+    }
+
+    dbg!(&actions, &expected_actions_and_parents);
     assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     let fix_batch_history_views = harness.list_fixes(ctx.visibility()).await;
@@ -638,6 +675,43 @@ async fn model_and_fix_flow_whiskers(
         (ingress.component_id, ActionKind::Delete, Vec::new()),
         (ec2.component_id, ActionKind::Delete, Vec::new()),
     ];
+
+    'outer: for (expected_comp_id, expected_kind, expected_parents) in &expected_actions_and_parents
+    {
+        for action in actions.values() {
+            if *expected_comp_id == action.component_id
+                && *expected_kind == action.kind
+                && action.parents.len() == expected_parents.len()
+            {
+                'parent_outer: for (expected_comp_id, expected_kind) in expected_parents {
+                    for action in actions.values() {
+                        if *expected_comp_id == action.component_id && *expected_kind == action.kind
+                        {
+                            continue 'parent_outer;
+                        }
+                    }
+
+                    panic!(
+                        "Expected parent action not found: {:?} ({:#?} {:#?})",
+                        (expected_comp_id, expected_kind),
+                        actions,
+                        expected_actions_and_parents
+                    );
+                }
+
+                continue 'outer;
+            }
+        }
+
+        panic!(
+            "Expected action not found: {:?} ({:#?} {:#?})",
+            (expected_comp_id, expected_kind),
+            actions,
+            expected_actions_and_parents
+        );
+    }
+
+    dbg!(&actions, &expected_actions_and_parents);
     assert_eq!(actions.len(), expected_actions_and_parents.len());
 
     let num_of_fix_batch_history_views = harness.list_fixes(ctx.visibility()).await.len();

@@ -52,6 +52,7 @@ pk!(ActionId);
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct ActionBag {
     pub action: Action,
+    pub kind: ActionKind,
     pub parents: Vec<ActionId>,
 }
 
@@ -173,7 +174,7 @@ impl Action {
         let ctx_with_deleted = &ctx.clone_with_delete_visibility();
 
         let nodes_graph = Node::build_graph(ctx, false).await?;
-        let mut actions_graph: HashMap<ActionId, Vec<ActionId>> = HashMap::new();
+        let mut actions_graph: HashMap<ActionId, (ActionKind, Vec<ActionId>)> = HashMap::new();
 
         for (node_id, parent_ids) in nodes_graph {
             let node = Node::get_by_id(ctx_with_deleted, &node_id)
@@ -219,7 +220,9 @@ impl Action {
             // order since they may be dependent on eachother, but there is nothing exposed about it
             for (kind, actions) in &actions_by_kind {
                 for action in actions {
-                    actions_graph.entry(*action.id()).or_default();
+                    actions_graph
+                        .entry(*action.id())
+                        .or_insert_with(|| (*kind, Vec::new()));
 
                     // Action kind order is Initial Deletion -> Creation -> Others -> Final Deletion
                     // Initial deletions happen if there is a resource and a create action, so it deletes before creating
@@ -227,7 +230,11 @@ impl Action {
                         ActionKind::Create => {
                             if resource.is_some() {
                                 let ids = action_ids_by_kind(ActionKind::Delete);
-                                actions_graph.entry(*action.id()).or_default().extend(ids);
+                                actions_graph
+                                    .entry(*action.id())
+                                    .or_insert_with(|| (*kind, Vec::new()))
+                                    .1
+                                    .extend(ids);
                             }
                         }
                         ActionKind::Delete => {
@@ -241,7 +248,11 @@ impl Action {
                                     .filter(|(k, _)| **k != ActionKind::Delete)
                                     .flat_map(|(_, a)| a)
                                     .map(|a| *a.id());
-                                actions_graph.entry(*action.id()).or_default().extend(ids);
+                                actions_graph
+                                    .entry(*action.id())
+                                    .or_insert_with(|| (*kind, Vec::new()))
+                                    .1
+                                    .extend(ids);
                             }
                         }
                         ActionKind::Refresh | ActionKind::Other => {
@@ -250,18 +261,23 @@ impl Action {
                                 && action_ids_by_kind(ActionKind::Create).count() > 0
                             {
                                 let ids = action_ids_by_kind(ActionKind::Delete);
-                                actions_graph.entry(*action.id()).or_default().extend(ids);
+                                actions_graph
+                                    .entry(*action.id())
+                                    .or_insert_with(|| (*kind, Vec::new()))
+                                    .1
+                                    .extend(ids);
                             }
 
                             let ids = action_ids_by_kind(ActionKind::Create);
-                            actions_graph.entry(*action.id()).or_default().extend(ids);
+                            actions_graph
+                                .entry(*action.id())
+                                .or_insert_with(|| (*kind, Vec::new()))
+                                .1
+                                .extend(ids);
                         }
                     }
                 }
             }
-
-            // Deletions requires reverse order than the rest
-            let mut reversed_parents: HashMap<ActionId, Vec<ActionId>> = HashMap::new();
 
             for parent_node_id in parent_ids {
                 let parent_node = Node::get_by_id(ctx_with_deleted, &parent_node_id)
@@ -281,41 +297,60 @@ impl Action {
                     .cloned()
                     .unwrap_or_default();
                 for (kind, actions) in &actions_by_kind {
-                    if *kind == ActionKind::Delete {
-                        for parent_action in &parent_actions {
-                            reversed_parents
-                                .entry(*parent_action.id())
-                                .or_default()
-                                .extend(actions.iter().map(|a| *a.id()));
-                        }
-                        continue;
-                    }
-
                     for action in actions {
                         actions_graph
                             .entry(*action.id())
-                            .or_default()
+                            .or_insert_with(|| (*kind, Vec::new()))
+                            .1
                             .extend(parent_actions.iter().map(|a| *a.id()));
                     }
                 }
             }
-
-            for (id, parents) in reversed_parents {
-                actions_graph.entry(id).or_default().extend(parents);
-            }
         }
 
         let mut actions_bag_graph: HashMap<ActionId, ActionBag> = HashMap::new();
-        for (id, parents) in actions_graph {
+        for (id, (kind, parents)) in actions_graph {
             actions_bag_graph.insert(
                 id,
                 ActionBag {
+                    kind,
                     action: actions_by_id
                         .get(&id)
                         .ok_or(ActionError::NotFound(id))?
                         .clone(),
                     parents,
                 },
+            );
+        }
+
+        // Deletions require the reverse order
+        let mut reversed_parents: HashMap<ActionId, Vec<ActionId>> = HashMap::new();
+
+        for bag in actions_bag_graph.values() {
+            if bag.kind == ActionKind::Delete {
+                for parent_id in &bag.parents {
+                    if let Some(parent) = actions_by_id.get(parent_id) {
+                        if parent.component_id != bag.action.component_id {
+                            reversed_parents
+                                .entry(*parent_id)
+                                .or_default()
+                                .push(*bag.action.id());
+                        }
+                    }
+                }
+            }
+        }
+
+        for bag in actions_bag_graph.values_mut() {
+            if bag.kind == ActionKind::Delete {
+                bag.parents.clear();
+            }
+
+            bag.parents.extend(
+                reversed_parents
+                    .get(bag.action.id())
+                    .cloned()
+                    .unwrap_or_default(),
             );
         }
 

@@ -42,7 +42,15 @@ pub async fn list_open_change_sets(
         let ctx =
             ctx.clone_with_new_visibility(Visibility::new(cs.pk, ctx.visibility().deleted_at));
         let mut actions = HashMap::new();
-        for (_, ActionBag { action, parents }) in cs.actions(&ctx).await? {
+        for (
+            _,
+            ActionBag {
+                action,
+                parents,
+                kind,
+            },
+        ) in cs.actions(&ctx).await?
+        {
             let mut display_name = None;
             let prototype = action.prototype(&ctx).await?;
             let func_details = Func::get_by_id(&ctx, &prototype.func_id()).await?;
@@ -75,8 +83,8 @@ pub async fn list_open_change_sets(
                 ActionView {
                     id: *action.id(),
                     action_prototype_id: *prototype.id(),
-                    kind: *prototype.kind(),
-                    name: display_name.unwrap_or_else(|| match prototype.kind() {
+                    kind,
+                    name: display_name.unwrap_or_else(|| match kind {
                         ActionKind::Create => "create".to_owned(),
                         ActionKind::Delete => "delete".to_owned(),
                         ActionKind::Other => "other".to_owned(),
