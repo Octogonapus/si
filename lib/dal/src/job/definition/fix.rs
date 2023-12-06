@@ -142,7 +142,8 @@ impl JobConsumer for FixesJob {
         let mut handles = FuturesUnordered::new();
 
         // So we don't keep an open transaction while the tasks run, each task has its own transaction
-        ctx.commit().await?;
+        // Block just in case
+        ctx.blocking_commit().await?;
 
         for fix_item in fix_items {
             let task_ctx = ctx
@@ -206,7 +207,7 @@ impl JobConsumer for FixesJob {
             }
         }
 
-        while let Some((id, err, logs)) = failed_fixes.pop_front() {
+        while let Some((id, err, logs)) = dbg!(failed_fixes.pop_front()) {
             fixes.remove(&id);
 
             if let Some(mut fix) = Fix::get_by_id(ctx, &id).await? {
@@ -279,8 +280,8 @@ impl JobConsumer for FixesJob {
                     ));
                 }
             }
+            ctx.blocking_commit().await?;
         }
-        ctx.blocking_commit().await?;
 
         if fixes.is_empty() {
             finish_batch(ctx, self.batch_id).await?;
@@ -288,6 +289,8 @@ impl JobConsumer for FixesJob {
             ctx.enqueue_job(FixesJob::new_iteration(ctx, fixes, self.batch_id))
                 .await?;
         }
+
+        ctx.commit().await?;
 
         Ok(())
     }
@@ -380,18 +383,15 @@ async fn fix_task(
     .publish_on_commit(&ctx)
     .await?;
 
-    if matches!(completion_status, FixCompletionStatus::Success) {
-        // Commit progress so far, and wait for dependent values propagation so we can run
-        // consecutive fixes that depend on the /root/resource from the previous fix.
-        // `blocking_commit()` will wait for any jobs that have ben created through
-        // `enqueue_job(...)` to finish before moving on.
-        ctx.blocking_commit().await?;
+    // Commit progress so far, and wait for dependent values propagation so we can run
+    // consecutive fixes that depend on the /root/resource from the previous fix.
+    // `blocking_commit()` will wait for any jobs that have ben created through
+    // `enqueue_job(...)` to finish before moving on.
+    ctx.blocking_commit().await?;
 
+    if matches!(completion_status, FixCompletionStatus::Success) {
         component.act(&ctx, ActionKind::Refresh).await?;
         ctx.blocking_commit().await?;
-    } else {
-        // The values generated here won't be used by subsequent fixes since they will be cancelled, so no need to block here
-        ctx.commit().await?;
     }
 
     Ok((fix, logs))
